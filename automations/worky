@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+
+# Check for -d flag in all arguments
+ENABLE_DOCKER=false
+ENABLE_EDITOR=false
+NEXT_IS_EDITOR=false
+PROJECT_NAME=""
+ADDITIONAL_TAB=""
+EDITOR_NAME=""
+
+for arg in "$@"; do
+    if [ "$NEXT_IS_EDITOR" = true ]; then
+        EDITOR_NAME="$arg"
+        NEXT_IS_EDITOR=false
+    elif [ "$arg" = "-d" ]; then
+        ENABLE_DOCKER=true
+    elif [ "$arg" = "-e" ]; then
+        ENABLE_EDITOR=true
+        NEXT_IS_EDITOR=true
+    elif [ "$arg" = "-h" ]; then
+        help
+        exit 0
+    elif [ -z "$PROJECT_NAME" ]; then
+        PROJECT_NAME="$arg"
+    elif [ -z "$ADDITIONAL_TAB" ]; then
+        ADDITIONAL_TAB="$arg"
+    fi
+done
+
+# validation of arguments
+if [ -z "$PROJECT_NAME" ]; then
+    echo "[Error]:: Name of project is required"
+    help
+    exit 1
+fi
+
+# Initial configs
+SESSION_NAME="$PROJECT_NAME"
+PROJECT_DIR="$HOME/Documents/projects/$PROJECT_NAME"
+NUMBER_WINDOW=1
+
+# Function to create window of timux
+create_window() {
+    local win_name="$1"
+    local win_command="$2"
+
+    if [ -n "$win_command" ] && [ -n "$win_name" ]; then
+        # Create window with name and command
+        tmux new-window -t "$SESSION_NAME:$NUMBER_WINDOW" -n "$win_name" "$win_command"
+        ((NUMBER_WINDOW++))
+    else
+        # Create window with name
+        if [ -n "$win_name" ]; then
+            tmux new-window -t "$SESSION_NAME:$NUMBER_WINDOW" -n "$win_name"
+        else
+            tmux new-window -t "$SESSION_NAME:$NUMBER_WINDOW"
+        fi
+        ((NUMBER_WINDOW++))
+    fi
+}
+
+open_editor() {
+    create_window "editor" "$EDITOR_NAME ."
+}
+
+connect_session() {
+    tmux attach-session -t "$SESSION_NAME"
+}
+
+help() {
+    echo "[Use]:: > worky <name-of-project> [name-of-additional-tab] [-d] [-e]"
+    echo "  -d: Enable docker window with 'ldk' command"
+    echo "  -e: Enable editor window with 'zed .' command"
+}
+
+# Verify if dir of exists project
+if [ ! -d "$PROJECT_DIR" ]; then
+    echo "[Error]:: Path '$PROJECT_DIR' not found"
+    exit 1
+fi
+
+# Start Docker postgres
+echo "Init docker container..."
+docker start some-postgres 2>/dev/null || echo "[Warning]:: Failure to init some-postgres"
+
+# Switch for the dir of project
+cd "$PROJECT_DIR" || exit 1
+
+# Verify if the session already exists
+if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+    echo "[Info]:: Session '$SESSION_NAME' already exists. Connecting..."
+    connect_session
+    exit 0
+fi
+
+# Create ths initial session with htop
+echo "Create session tmux '$SESSION_NAME'..."
+tmux new-session -d -s "$SESSION_NAME" -n 'htop' 'htop -d 15'
+
+# Create docker window only if -d flag is present
+if [ "$ENABLE_DOCKER" = "true" ]; then
+    create_window "docker" "ldk"
+fi
+
+# Create additional window
+if [ -n "$ADDITIONAL_TAB" ]; then
+    create_window "$ADDITIONAL_TAB"
+fi
+
+if [ "$ENABLE_EDITOR" = "true" ]; then
+    open_editor
+fi
+
+# Connect to session
+echo "Connecting to session..."
+connect_session
