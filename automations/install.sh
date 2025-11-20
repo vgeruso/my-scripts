@@ -6,7 +6,7 @@ if [ -z "$1" ]; then
     exit 1
 fi
 
-PATH_SCRIPT="$HOME/Documents/projects/scripts/$1"
+PATH_SCRIPT="$HOME/Documents/projects/my-scripts/automations/$1"
 PATH_BIN="/usr/bin/$1"
 
 if [ ! -f "$PATH_SCRIPT" ]; then
